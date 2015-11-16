@@ -141,7 +141,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     base_url = ''
     server = @indexers[@idx_indexers];
     @idx_indexers = (@idx_indexers + 1) % @indexers.length
-    base_url = "https://#{server}/services/collectors"
+    base_url = "https://#{server}/services/collector"
     base_url
   end
 end
