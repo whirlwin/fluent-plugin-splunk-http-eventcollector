@@ -23,31 +23,18 @@
 
 module Fluent
 
-class SplunkAPIOutput < BufferedOutput
-  Plugin.register_output('splunkapi', self)
+class SplunkHTTPEventcollectorOutput < BufferedOutput
+  Plugin.register_output('splunk-http-eventcollector', self)
 
-  config_param :protocol, :string, :default => 'rest'
-
-  # for Splunk REST API
-  config_param :server, :string, :default => 'localhost:8089'
+  config_param :server, :string, :default => 'localhost:8088'
   config_param :verify, :bool, :default => true
-  config_param :auth, :string, :default => nil # TODO: required with rest
-
-  # for Splunk Storm API
-  config_param :access_token, :string, :default => nil # TODO: required with storm
-  config_param :api_hostname, :string, :default => 'api.splunkstorm.com'
-  config_param :project_id, :string, :default => nil # TODO: required with storm
+  config_param :token, :string, :default => nil
 
   # Event parameters
   config_param :host, :string, :default => nil # TODO: auto-detect
   config_param :index, :string, :default => nil
-  config_param :check_index, :bool, :default => true
   config_param :source, :string, :default => '{TAG}'
-  config_param :sourcetype, :string, :default => 'fluent'
-
-  # Formatting
-  config_param :time_format, :string, :default => 'localtime'
-  config_param :format, :string, :default => 'json'
+  config_param :sourcetype, :string, :default => '_json'
 
   config_param :post_retry_max, :integer, :default => 5
   config_param :post_retry_interval, :integer, :default => 5
@@ -70,39 +57,8 @@ class SplunkAPIOutput < BufferedOutput
       @source_formatter = lambda { |tag| @source.sub('{TAG}', tag) }
     end
 
-    case @time_format
-    when 'none'
-      @time_formatter = nil
-    when 'unixtime'
-      @time_formatter = lambda { |time| time.to_s }
-    when 'localtime'
-      @time_formatter = lambda { |time| Time.at(time).localtime }
-    else
-      @timef = TimeFormatter.new(@time_format, @localtime)
-      @time_formatter = lambda { |time| @timef.format(time) }
-    end
-
-    case @format
-    when 'json'
-      @formatter = lambda { |record|
-        record.to_json
-      }
-    when 'kvp'
-      @formatter = lambda { |record|
-        record_to_kvp(record)
-      }
-    when 'text'
-      @formatter = lambda { |record|
-        # NOTE: never modify 'record' directly
-        record_copy = record.dup
-        record_copy.delete('message')
-        if record_copy.length == 0
-          record['message']
-        else
-          "[#{record_to_kvp(record_copy)}] #{record['message']}"
-        end
-      }
-    end
+    @time_formatter = lambda { |time| time.to_s }
+    @formatter = lambda { |record| record.to_json }
 
     if @server.match(/,/)
       @indexers = @server.split(',')
@@ -111,16 +67,12 @@ class SplunkAPIOutput < BufferedOutput
     end
   end
 
-  def record_to_kvp(record)
-    record.map {|k,v| v == nil ? "#{k}=" : "#{k}=\"#{v}\""}.join(' ')
-  end
-
   def start
     super
-    @http = Net::HTTP::Persistent.new 'fluentd-plugin-splunkapi'
+    @http = Net::HTTP::Persistent.new 'fluent-plugin-splunk-http-eventcollector'
     @http.verify_mode = OpenSSL::SSL::VERIFY_NONE unless @verify
-    @http.headers['Content-Type'] = 'text/plain'
-    $log.debug "initialized for splunkapi"
+    @http.headers['Content-Type'] = 'text/plain' #XXX Might need to change this to application/json
+    $log.debug "initialized for splunk-http-eventcollector"
   end
 
   def shutdown
@@ -128,7 +80,7 @@ class SplunkAPIOutput < BufferedOutput
     super
 
     @http.shutdown
-    $log.debug "shutdown from splunkapi"
+    $log.debug "shutdown from splunk-http-eventcollector"
   end
 
   def format(tag, time, record)
@@ -138,7 +90,7 @@ class SplunkAPIOutput < BufferedOutput
       time_str = ''
     end
 
-    record.delete('time')
+    #record.delete('time')
     event = "#{time_str}#{@formatter.call(record)}\n"
 
     [tag, event].to_msgpack
@@ -154,15 +106,15 @@ class SplunkAPIOutput < BufferedOutput
 
   def write(chunk)
     chunk_to_buffers(chunk).each do |source, messages|
-      uri = URI get_baseurl + "&source=#{source}"
+      uri = URI get_baseurl
       post = Net::HTTP::Post.new uri.request_uri
-      post.basic_auth @username, @password
+      post['Authorization'] = "Splunk #{token}"
       post.body = messages.join('')
       $log.debug "POST #{uri}"
       # retry up to :post_retry_max times
       1.upto(@post_retry_max) do |c|
         response = @http.request uri, post
-        $log.debug "=> #{response.code} (#{response.message})"
+        $log.debug "=>(#{c}/#{@post_retry_max} #{response.code} (#{response.message})"
         if response.code == "200"
           # success
           break
@@ -172,6 +124,7 @@ class SplunkAPIOutput < BufferedOutput
           break
         elsif c < @post_retry_max
           # retry
+          $log.debug "#{uri}: Retrying..."
           sleep @post_retry_interval
           next
         else
@@ -185,19 +138,9 @@ class SplunkAPIOutput < BufferedOutput
 
   def get_baseurl
     base_url = ''
-    if @protocol == 'rest'
-      @username, @password = @auth.split(':')
-      server = @indexers[@idx_indexers];
-      @idx_indexers = (@idx_indexers + 1) % @indexers.length
-      base_url = "https://#{server}/services/receivers/simple?sourcetype=#{@sourcetype}"
-      base_url += "&host=#{@host}" if @host
-      base_url += "&index=#{@index}" if @index
-      base_url += "&check-index=false" unless @check_index
-    elsif @protocol == 'storm'
-      @username, @password = 'x', @access_token
-      base_url = "https://#{@api_hostname}/1/inputs/http?index=#{@project_id}&sourcetype=#{@sourcetype}"
-      base_url += "&host=#{@host}" if @host
-    end
+    server = @indexers[@idx_indexers];
+    @idx_indexers = (@idx_indexers + 1) % @indexers.length
+    base_url = "https://#{server}/services/collectors"
     base_url
   end
 end

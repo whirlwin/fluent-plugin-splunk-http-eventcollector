@@ -1,38 +1,17 @@
-# Fluent::Plugin::SplunkAPI, a plugin for [Fluentd](http://fluentd.org)
+# Fluent::Plugin::SplunkHTTPEventcollector, a plugin for [Fluentd](http://fluentd.org)
 
 Splunk output plugin for Fluent event collector.
 
-This plugin makes use of the following APIs:
+This plugin interfaces with the Splunk HTTP Event Collector:
+  http://dev.splunk.com/view/event-collector/SP-CAAAE6M
 
-Splunk REST API:
-
-  http://docs.splunk.com/Documentation/Splunk/latest/RESTAPI/RESTinput
-
-Splunk Storm API:
-
-  http://docs.splunk.com/Documentation/Storm/latest/User/UseStormsRESTAPI
-
-## Notes
-
-Although this plugin is capable of sending Fluent events directly to
-Splunk servers or Splunk Storm, it is not recommended to do so.
-Please use "Universal Forwarder" as a gateway, as described below.
-
-It is known that this plugin has several issues of performance and
-error handling in dealing with large data sets.  With a local/reliable
-forwarder, you can aggregate a number of events locally and send them
-to a server in bulk.
-
-In short, I'd recommend to install a forwarder in each host, and use
-this plugin to deliver events to the local forwarder:
+## Basic Example
 
     <match **>
-      # Deliver events to the local forwarder.
-      type splunkapi
-      protocol rest
-      server 127.0.0.1:8089
+      type splunk-http-eventcollector
+      server 127.0.0.1:8088
       verify false
-      auth admin:changeme
+      token YOUR-TOKEN
 
       # Convert fluent tags to Splunk sources.
       # If you set an index, "check_index false" is required.
@@ -53,19 +32,11 @@ this plugin to deliver events to the local forwarder:
       flush_interval 2s
     </match>
 
-## Additional Notes
-
-Splunk 5 has a new feature called "Modular Inputs":
-
-http://blogs.splunk.com/2013/04/16/modular-inputs-tools/
-
-My plan is switching to Modular Inputs rather than staying with APIs.
-
 ## Installation
 
 Add this line to your application's Gemfile:
 
-    gem 'fluent-plugin-splunkapi'
+    gem 'fluent-plugin-splunk-http-eventcollector'
 
 And then execute:
 
@@ -73,49 +44,25 @@ And then execute:
 
 Or install it yourself as:
 
-    $ gem install fluent-plugin-splunkapi
+    $ gem install fluent-plugin-splunk-http-eventcollector
 
 ## Configuration
 
 Put the following lines to your fluent.conf:
 
     <match **>
-      type splunkapi
-
-      #
-      # Splnk Server
-      #
-
-      # protocol: API protocol version
-      # values: rest, storm
-      # default: rest
-      protocol rest
+      type splunk-http-eventcollector
 
       # server: Splunk server host and port
-      # default: localhost:8089
-      server localhost:8089
+      # default: localhost:8088
+      server localhost:8088
 
       # verify: SSL server verification
       # default: true
       #verify false
 
-      # auth: username and password
-      auth admin:pass
-
-      #
-      # Splnk Storm
-      #
-
-      # protocol: API protocol version.
-      # values: rest, storm
-      # default: rest
-      #protocol storm
-
-      # access_token: for Splunk Storm
-      #access_token YOUR-ACCESS-TOKEN
-
-      # access_token: for Splunk Storm
-      #project_id YOUR-PROJECT-ID
+      # token: the token issued
+      token YOUR-TOKEN
 
       #
       # Event Parameters
@@ -179,7 +126,7 @@ Put the following lines to your fluent.conf:
       # buffer_chunk_limit: The maxium size of POST data in a single API call.
       # 
       # This value should be reasonablly small since the current implementation
-      # of out_splunkapi converts a chunk to POST data on memory before API calls.
+      # of out_splunk-http-eventcollector converts a chunk to POST data on memory before API calls.
       # The default value should be good enough.
       buffer_chunk_limit 8m
 
@@ -211,7 +158,7 @@ Put the following lines to your fluent.conf:
 
     # fluent logs in text format
     <match fluent.*>
-      type splunkapi
+      type splunk-http-eventcollector
       protocol rest
       server splunk.example.com:8089
       auth admin:pass
@@ -221,7 +168,7 @@ Put the following lines to your fluent.conf:
 
     # log files in text format without timestamp
     <match *.log>
-      type splunkapi
+      type splunk-http-eventcollector
       protocol rest
       server splunk.example.com:8089
       auth admin:pass
@@ -232,7 +179,7 @@ Put the following lines to your fluent.conf:
 
     # application logs in kvp format
     <match app.**>
-      type splunkapi
+      type splunk-http-eventcollector
       protocol rest
       server splunk.example.com:8089
       auth admin:pass

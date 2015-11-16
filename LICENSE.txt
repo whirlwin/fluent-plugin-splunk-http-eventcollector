@@ -1,4 +1,4 @@
-Copyright (C) 2013 Keisuke Nishida
+Copyright (C) 2015 Bryce Chidester
 
 Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
