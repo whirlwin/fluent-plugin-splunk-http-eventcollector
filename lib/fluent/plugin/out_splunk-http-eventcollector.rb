@@ -71,7 +71,8 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     super
     @http = Net::HTTP::Persistent.new 'fluent-plugin-splunk-http-eventcollector'
     @http.verify_mode = OpenSSL::SSL::VERIFY_NONE unless @verify
-    @http.headers['Content-Type'] = 'text/plain' #XXX Might need to change this to application/json
+    @http.override_headers['Content-Type'] = 'application/json'
+    @http.override_headers['User-Agent'] = 'fluent-plugin-splunk-http-eventcollector/0.0.1'
     $log.debug "initialized for splunk-http-eventcollector"
   end
 
