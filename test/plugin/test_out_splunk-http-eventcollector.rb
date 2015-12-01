@@ -12,7 +12,7 @@ class SplunkHTTPEventcollectorOutputTest < Test::Unit::TestCase
   ]
 
   def create_driver(conf=CONFIG, tag='test')
-    Fluent::Test::BufferedOutputTestDriver.new(Fluent::SplunkHTTPEventcollectorOutput, tag).configure(conf)
+    Fluent::Test::OutputTestDriver.new(Fluent::SplunkHTTPEventcollectorOutput, tag).configure(conf)
   end
 
   def test_configure
