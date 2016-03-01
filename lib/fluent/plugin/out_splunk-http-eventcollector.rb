@@ -30,6 +30,8 @@ module Fluent
 class SplunkHTTPEventcollectorOutput < BufferedOutput
   Plugin.register_output('splunk-http-eventcollector', self)
   
+  config_param :test_mode, :bool, :default => false
+  
   config_param :server, :string, :default => 'localhost:8088'
   config_param :verify, :bool, :default => true
   config_param :token, :string, :default => nil
@@ -174,6 +176,10 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     post = Net::HTTP::Post.new @splunk_uri.request_uri
     post.body = body
     $log.debug "POST #{@splunk_uri}"
+    if @test_mode
+      $log.debug "TEST_MODE Payload: #{body}"
+      return
+    end
     # retry up to :post_retry_max times
     1.upto(@post_retry_max) do |c|
       response = @http.request @splunk_uri, post
