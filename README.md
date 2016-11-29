@@ -46,6 +46,10 @@ Or install it yourself as:
 
     $ gem install fluent-plugin-splunk-http-eventcollector
 
+Whatever is appropriate for your environment. Note: If you're using the
+`td-agent` package, it brings with it its own "embedded" Ruby environment with
+either `td-agent-gem` or `/opt/td-agent/embedded/bin/gem` depending on platform.
+
 ## Configuration
 
 Put the following lines to your fluent.conf:
