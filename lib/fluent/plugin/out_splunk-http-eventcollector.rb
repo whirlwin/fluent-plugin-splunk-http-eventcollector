@@ -39,6 +39,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   # Event parameters
   config_param :host, :string, :default => nil
   config_param :index, :string, :default => 'main'
+  config_param :all_items, :bool, :default => false
   
   config_param :post_retry_max, :integer, :default => 5
   config_param :post_retry_interval, :integer, :default => 5
@@ -99,12 +100,16 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     #$log.debug "splunk-http-eventcollector(format) called"
     # Basic object for Splunk. Note explicit type-casting to avoid accidental errors.
     splunk_object = Hash[
-        "event" => record["message"],
         "time" => time.to_i,
         "source" => tag.to_s,
         "host" => @host.to_s,
         "index" => @index.to_s
         ]
+    if @all_items
+        splunk_object["event"] = record
+    else
+        splunk_object["event"] = record["message"]
+    end
     json_event = splunk_object.to_json
     #$log.debug "Generated JSON(#{json_event.class.to_s}): #{json_event.to_s}"
     #$log.debug "format: returning: #{[tag, record].to_json.to_s}"
