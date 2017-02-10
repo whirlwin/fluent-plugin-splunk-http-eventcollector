@@ -51,7 +51,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   # Called on class load (class initializer)
   def initialize
     super
-    $log.debug "splunk-http-eventcollector(initialize) called"
+    log.trace "splunk-http-eventcollector(initialize) called"
     require 'net/http/persistent'
     require 'openssl'
   end  # initialize
@@ -61,7 +61,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   ## If the configuration is invalid, raise Fluent::ConfigError.
   def configure(conf)
     super
-    $log.debug "splunk-http-eventcollector(configure) called"
+    log.trace "splunk-http-eventcollector(configure) called"
     begin
       @splunk_uri = URI "https://#{@server}/services/collector"
     rescue
@@ -74,30 +74,30 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   ## Open sockets or files here.
   def start
     super
-    $log.debug "splunk-http-eventcollector(start) called"
+    log.trace "splunk-http-eventcollector(start) called"
     @http = Net::HTTP::Persistent.new 'fluent-plugin-splunk-http-eventcollector'
     @http.verify_mode = OpenSSL::SSL::VERIFY_NONE unless @verify
     @http.override_headers['Content-Type'] = 'application/json'
     @http.override_headers['User-Agent'] = 'fluent-plugin-splunk-http-eventcollector/0.0.1'
     @http.override_headers['Authorization'] = "Splunk #{@token}"
     
-    $log.debug "initialized for splunk-http-eventcollector"
+    log.trace "initialized for splunk-http-eventcollector"
   end
   
   ## This method is called when shutting down.
   ## Shutdown the thread and close sockets or files here.
   def shutdown
     super
-    $log.debug "splunk-http-eventcollector(shutdown) called"
+    log.trace "splunk-http-eventcollector(shutdown) called"
     
     @http.shutdown
-    $log.debug "shutdown from splunk-http-eventcollector"
+    log.trace "shutdown from splunk-http-eventcollector"
   end  # shutdown
   
   ## This method is called when an event reaches to Fluentd. (like unbuffered emit())
   ## Convert the event to a raw string.
   def format(tag, time, record)
-    #$log.debug "splunk-http-eventcollector(format) called"
+    #log.trace "splunk-http-eventcollector(format) called"
     # Basic object for Splunk. Note explicit type-casting to avoid accidental errors.
     splunk_object = Hash[
         "time" => time.to_i,
@@ -111,8 +111,8 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
         splunk_object["event"] = record["message"]
     end
     json_event = splunk_object.to_json
-    #$log.debug "Generated JSON(#{json_event.class.to_s}): #{json_event.to_s}"
-    #$log.debug "format: returning: #{[tag, record].to_json.to_s}"
+    #log.debug "Generated JSON(#{json_event.class.to_s}): #{json_event.to_s}"
+    #log.debug "format: returning: #{[tag, record].to_json.to_s}"
     json_event
   end
   
@@ -127,7 +127,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   ##
   ## NOTE! This method is called by internal thread, not Fluentd's main thread. So IO wait doesn't affect other plugins.
   def write(chunk)
-    $log.debug "splunk-http-eventcollector(write) called"
+    log.trace "splunk-http-eventcollector(write) called"
     
     # Break the concatenated string of JSON-formatted events into an Array
     split_chunk = chunk.read.split("}{").each do |x|
@@ -135,33 +135,33 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       x.prepend("{") unless x.start_with?("{")
       x << "}" unless x.end_with?("}")
     end
-    $log.debug "Pushing #{numfmt(split_chunk.size)} events (" +
+    log.debug "Pushing #{numfmt(split_chunk.size)} events (" +
         "#{numfmt(chunk.read.bytesize)} bytes) to Splunk."
     # If fluentd is pushing too much data to Splunk at once, split up the payload
     # Don't care about the number of events so much as the POST size (bytes)
     #if split_chunk.size > @batch_event_limit
-    #  $log.warn "Fluentd is attempting to push #{numfmt(split_chunk.size)} " +
+    #  log.warn "Fluentd is attempting to push #{numfmt(split_chunk.size)} " +
     #      "events in a single push to Splunk. The configured limit is " + 
     #      "#{numfmt(@batch_event_limit)}."
     #end
     if chunk.read.bytesize > @batch_size_limit
-      $log.warn "Fluentd is attempting to push #{numfmt(chunk.read.bytesize)} " +
+      log.warn "Fluentd is attempting to push #{numfmt(chunk.read.bytesize)} " +
           "bytes in a single push to Splunk. The configured limit is " + 
           "#{numfmt(@batch_size_limit)} bytes."
       newbuffer = Array.new
       split_chunk_counter = 0
       split_chunk.each do |c|
         split_chunk_counter = split_chunk_counter + 1
-        #$log.debug "(#{numfmt(split_chunk_counter)}/#{numfmt(split_chunk.size)}) " +
+        #log.debug "(#{numfmt(split_chunk_counter)}/#{numfmt(split_chunk.size)}) " +
         #    "newbuffer.bytesize=#{numfmt(newbuffer.join.bytesize)} + " +
         #    "c.bytesize=#{numfmt(c.bytesize)} ????"
         if newbuffer.join.bytesize + c.bytesize < @batch_size_limit
-          #$log.debug "Appended!"
+          #log.debug "Appended!"
           newbuffer << c
         else
           # Reached the limit - push the current newbuffer.join, and reset
-          #$log.debug "Would exceed limit. Flushing newbuffer and continuing."
-          $log.debug "(#{numfmt(split_chunk_counter)}/#{numfmt(split_chunk.size)}) " +
+          #log.debug "Would exceed limit. Flushing newbuffer and continuing."
+          log.debug "(#{numfmt(split_chunk_counter)}/#{numfmt(split_chunk.size)}) " +
               "newbuffer.bytesize=#{numfmt(newbuffer.join.bytesize)} + " +
               "c.bytesize=#{numfmt(c.bytesize)} > #{numfmt(@batch_size_limit)}, " +
               "flushing current buffer to Splunk."
@@ -180,15 +180,15 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   def push_buffer(body)
     post = Net::HTTP::Post.new @splunk_uri.request_uri
     post.body = body
-    $log.debug "POST #{@splunk_uri}"
+    log.debug "POST #{@splunk_uri}"
     if @test_mode
-      $log.debug "TEST_MODE Payload: #{body}"
+      log.debug "TEST_MODE Payload: #{body}"
       return
     end
     # retry up to :post_retry_max times
     1.upto(@post_retry_max) do |c|
       response = @http.request @splunk_uri, post
-      $log.debug "=>(#{c}/#{numfmt(@post_retry_max)}) #{response.code} " +
+      log.debug "=>(#{c}/#{numfmt(@post_retry_max)}) #{response.code} " +
           "(#{response.message})"
       # TODO check the actual server response too (it's JSON)
       if response.code == "200"  # and...
@@ -197,18 +197,18 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       # TODO check 40X response within post_retry_max and retry
       elsif response.code.match(/^50/) and c < @post_retry_max
         # retry
-        $log.warn "#{@splunk_uri}: Server error #{response.code} (" +
+        log.warn "#{@splunk_uri}: Server error #{response.code} (" +
             "#{response.message}). Retrying in #{@post_retry_interval} " +
             "seconds.\n#{response.body}"
         sleep @post_retry_interval
         next
       elsif response.code.match(/^40/)
         # user error
-        $log.error "#{@splunk_uri}: #{response.code} (#{response.message})\n#{response.body}"
+        log.error "#{@splunk_uri}: #{response.code} (#{response.message})\n#{response.body}"
         break
       elsif c < @post_retry_max
         # retry
-        $log.debug "#{@splunk_uri}: Retrying..."
+        log.debug "#{@splunk_uri}: Retrying..."
         sleep @post_retry_interval
         next
       else
