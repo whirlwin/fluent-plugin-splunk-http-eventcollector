@@ -61,6 +61,10 @@ Put the following lines to your fluent.conf:
       # default: localhost:8088
       server localhost:8088
 
+      # protocol: Connect to Splunk server via 'http' or 'https'
+      # default: https
+      #protocol http
+
       # verify: SSL server verification
       # default: true
       #verify false
