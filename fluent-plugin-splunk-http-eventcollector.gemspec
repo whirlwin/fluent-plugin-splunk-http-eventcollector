@@ -9,7 +9,7 @@ Gem::Specification.new do |gem|
   gem.summary          = "Splunk output plugin for Fluentd"
   gem.description      = "Splunk output plugin (HTTP Event Collector) for Fluentd event collector"
   gem.homepage         = "https://github.com/brycied00d/fluent-plugin-splunk-http-eventcollector"
-  gem.license          = 'BSD 2-clause'
+  gem.license          = 'BSD-2-Clause'
   gem.extra_rdoc_files = [ "LICENSE", "README.md" ]
   gem.files            = [ ".gitignore", "Gemfile", "LICENSE", "README.md",
                            "Rakefile", "test/helper.rb",
