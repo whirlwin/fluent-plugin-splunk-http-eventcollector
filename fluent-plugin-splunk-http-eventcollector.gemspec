@@ -23,5 +23,5 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency "test-unit", '~> 3.1'
   gem.add_runtime_dependency "fluentd", '~> 0.12'
   gem.add_runtime_dependency "net-http-persistent", '~> 2.9'
-  gem.add_runtime_dependency "fluent-mixin-rewrite-tag-name"
+  gem.add_runtime_dependency "fluent-mixin-rewrite-tag-name", '~> 0.1.0'
 end
