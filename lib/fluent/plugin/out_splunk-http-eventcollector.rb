@@ -25,11 +25,16 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =end
+require 'fluent/mixin/rewrite_tag_name'
 
 module Fluent
 class SplunkHTTPEventcollectorOutput < BufferedOutput
-  Plugin.register_output('splunk-http-eventcollector', self)
   
+  Plugin.register_output('splunk-http-eventcollector', self)
+
+  include Fluent::HandleTagNameMixin
+  include Fluent::Mixin::RewriteTagName
+
   config_param :test_mode, :bool, :default => false
   
   config_param :server, :string, :default => 'localhost:8088'
@@ -37,10 +42,13 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   config_param :token, :string, :default => nil
   
   # Event parameters
+  config_param :protocol, :string, :default => 'https'
   config_param :host, :string, :default => nil
   config_param :index, :string, :default => 'main'
   config_param :all_items, :bool, :default => false
   
+  config_param :sourcetype, :string, :default => 'fluentd'
+  config_param :source, :string, :default => nil
   config_param :post_retry_max, :integer, :default => 5
   config_param :post_retry_interval, :integer, :default => 5
   
@@ -63,7 +71,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     super
     log.trace "splunk-http-eventcollector(configure) called"
     begin
-      @splunk_uri = URI "https://#{@server}/services/collector"
+      @splunk_uri = URI "#{@protocol}://#{@server}/services/collector"
     rescue
       raise ConfigError, "Unable to parse the server into a URI."
     end
@@ -99,12 +107,16 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   def format(tag, time, record)
     #log.trace "splunk-http-eventcollector(format) called"
     # Basic object for Splunk. Note explicit type-casting to avoid accidental errors.
+    @placeholder_expander.set_tag(tag)
+
     splunk_object = Hash[
         "time" => time.to_i,
-        "source" => tag.to_s,
+        "source" => if @source.nil? then tag.to_s else @placeholder_expander.expand(@source) end,
+        "sourcetype" => @placeholder_expander.expand(@sourcetype.to_s),
         "host" => @host.to_s,
-        "index" => @index.to_s
-        ]
+        "index" =>  @placeholder_expander.expand(@index)
+      ]
+    # TODO: parse different source types as expected: KVP, JSON, TEXT
     if @all_items
         splunk_object["event"] = record
     else
