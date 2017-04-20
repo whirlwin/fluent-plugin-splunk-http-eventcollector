@@ -56,6 +56,16 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   config_param :batch_size_limit, :integer, :default => 262144 # 65535
   #config_param :batch_event_limit, :integer, :default => 100
 
+  # Whether to allow non-UTF-8 characters in user logs. If set to true, any
+  # non-UTF-8 character would be replaced by the string specified by
+  # 'non_utf8_replacement_string'. If set to false, any non-UTF-8 character
+  # would trigger the plugin to error out.
+  config_param :coerce_to_utf8, :bool, :default => true
+
+  # If 'coerce_to_utf8' is set to true, any non-UTF-8 character would be
+  # replaced by the string specified here.
+  config_param :non_utf8_replacement_string, :string, :default => ' '
+
   # Called on class load (class initializer)
   def initialize
     super
@@ -156,10 +166,11 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       ]
     # TODO: parse different source types as expected: KVP, JSON, TEXT
     if @all_items
-        splunk_object["event"] = record
+      splunk_object["event"] = convert_to_utf8(record)
     else
-        splunk_object["event"] = record["message"]
+      splunk_object["event"] = convert_to_utf8(record["message"])
     end
+
     json_event = splunk_object.to_json
     #log.debug "Generated JSON(#{json_event.class.to_s}): #{json_event.to_s}"
     #log.debug "format: returning: #{[tag, record].to_json.to_s}"
@@ -272,5 +283,42 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   def numfmt(input)
     input.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\1,').reverse
   end # numfmt
+
+  # Encode as UTF-8. If 'coerce_to_utf8' is set to true in the config, any
+  # non-UTF-8 character would be replaced by the string specified by
+  # 'non_utf8_replacement_string'. If 'coerce_to_utf8' is set to false, any
+  # non-UTF-8 character would trigger the plugin to error out.
+  # Thanks to
+  # https://github.com/GoogleCloudPlatform/fluent-plugin-google-cloud/blob/dbc28575/lib/fluent/plugin/out_google_cloud.rb#L1284
+  def convert_to_utf8(input)
+    if input.is_a?(Hash)
+      record = {}
+      input.each do |key, value|
+        record[convert_to_utf8(key)] = convert_to_utf8(value)
+      end
+
+      return record
+    end
+    return input.map { |value| convert_to_utf8(value) } if input.is_a?(Array)
+    return input unless input.respond_to?(:encode)
+
+    if @coerce_to_utf8
+      input.encode(
+        'utf-8',
+        invalid: :replace,
+        undef: :replace,
+        replace: @non_utf8_replacement_string)
+    else
+      begin
+        input.encode('utf-8')
+      rescue EncodingError
+        @log.error 'Encountered encoding issues potentially due to non ' \
+                   'UTF-8 characters. To allow non-UTF-8 characters and ' \
+                   'replace them with spaces, please set "coerce_to_utf8" ' \
+                   'to true.'
+        raise
+      end
+    end
+  end
 end  # class SplunkHTTPEventcollectorOutput
 end  # module Fluent
