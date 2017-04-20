@@ -16,12 +16,12 @@ Gem::Specification.new do |gem|
                            "fluent-plugin-splunk-http-eventcollector.gemspec",
                            "lib/fluent/plugin/out_splunk-http-eventcollector.rb",
                            "test/plugin/test_out_splunk-http-eventcollector.rb" ]
-  gem.test_files       = [ "test/helper.rb", 
+  gem.test_files       = [ "test/helper.rb",
                            "test/plugin/test_out_splunk-http-eventcollector.rb" ]
   gem.require_paths    = ["lib"]
 
   gem.add_development_dependency "test-unit", '~> 3.1'
+  gem.add_development_dependency "webmock", '~> 2.3', '>= 2.3.2'
   gem.add_runtime_dependency "fluentd", '~> 0.12'
   gem.add_runtime_dependency "net-http-persistent", '~> 2.9'
-  gem.add_runtime_dependency "fluent-mixin-rewrite-tag-name", '~> 0.1.0'
 end

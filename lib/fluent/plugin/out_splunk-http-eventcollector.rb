@@ -25,37 +25,37 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =end
-require 'fluent/mixin/rewrite_tag_name'
+
+# Splunk HTTP Event collector docs
+# http://dev.splunk.com/view/event-collector/SP-CAAAE6M
+# http://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTinput#services.2Fcollector
 
 module Fluent
 class SplunkHTTPEventcollectorOutput < BufferedOutput
-  
+
   Plugin.register_output('splunk-http-eventcollector', self)
 
-  include Fluent::HandleTagNameMixin
-  include Fluent::Mixin::RewriteTagName
-
   config_param :test_mode, :bool, :default => false
-  
+
   config_param :server, :string, :default => 'localhost:8088'
   config_param :verify, :bool, :default => true
   config_param :token, :string, :default => nil
-  
+
   # Event parameters
   config_param :protocol, :string, :default => 'https'
   config_param :host, :string, :default => nil
   config_param :index, :string, :default => 'main'
   config_param :all_items, :bool, :default => false
-  
+
   config_param :sourcetype, :string, :default => 'fluentd'
   config_param :source, :string, :default => nil
   config_param :post_retry_max, :integer, :default => 5
   config_param :post_retry_interval, :integer, :default => 5
-  
+
   # TODO Find better upper limits
   config_param :batch_size_limit, :integer, :default => 262144 # 65535
   #config_param :batch_event_limit, :integer, :default => 100
-  
+
   # Called on class load (class initializer)
   def initialize
     super
@@ -63,7 +63,34 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     require 'net/http/persistent'
     require 'openssl'
   end  # initialize
-  
+
+  # Thanks to
+  # https://github.com/kazegusuri/fluent-plugin-prometheus/blob/348c112d/lib/fluent/plugin/prometheus.rb
+  def self.placeholder_expander(log)
+    # Use internal class in order to expand placeholder
+    if defined?(Fluent::Filter) # for v0.12, built-in PlaceholderExpander
+      begin
+        require 'fluent/plugin/filter_record_transformer'
+        if defined?(Fluent::Plugin::RecordTransformerFilter::PlaceholderExpander)
+          # for v0.14
+          return Fluent::Plugin::RecordTransformerFilter::PlaceholderExpander.new(log: log)
+        else
+          # for v0.12
+          return Fluent::RecordTransformerFilter::PlaceholderExpander.new(log: log)
+        end
+      rescue LoadError => e
+        raise ConfigError, "cannot find filter_record_transformer plugin: #{e.message}"
+      end
+    else # for v0.10, use PlaceholderExapander in fluent-plugin-record-reformer plugin
+      begin
+        require 'fluent/plugin/out_record_reformer.rb'
+        return Fluent::RecordReformerOutput::PlaceholderExpander.new(log: log)
+      rescue LoadError => e
+        raise ConfigError, "cannot find fluent-plugin-record-reformer: #{e.message}"
+      end
+    end
+  end
+
   ## This method is called before starting.
   ## 'conf' is a Hash that includes configuration parameters.
   ## If the configuration is invalid, raise Fluent::ConfigError.
@@ -75,9 +102,12 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     rescue
       raise ConfigError, "Unable to parse the server into a URI."
     end
+
+    @placeholder_expander = Fluent::SplunkHTTPEventcollectorOutput.placeholder_expander(log)
+    @hostname = Socket.gethostname
     # TODO Add other robust input/syntax checks.
   end  # configure
-  
+
   ## This method is called when starting.
   ## Open sockets or files here.
   def start
@@ -88,33 +118,41 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     @http.override_headers['Content-Type'] = 'application/json'
     @http.override_headers['User-Agent'] = 'fluent-plugin-splunk-http-eventcollector/0.0.1'
     @http.override_headers['Authorization'] = "Splunk #{@token}"
-    
+
     log.trace "initialized for splunk-http-eventcollector"
   end
-  
+
   ## This method is called when shutting down.
   ## Shutdown the thread and close sockets or files here.
   def shutdown
     super
     log.trace "splunk-http-eventcollector(shutdown) called"
-    
+
     @http.shutdown
     log.trace "shutdown from splunk-http-eventcollector"
   end  # shutdown
-  
+
   ## This method is called when an event reaches to Fluentd. (like unbuffered emit())
   ## Convert the event to a raw string.
   def format(tag, time, record)
     #log.trace "splunk-http-eventcollector(format) called"
     # Basic object for Splunk. Note explicit type-casting to avoid accidental errors.
-    @placeholder_expander.set_tag(tag)
+
+    placeholder_values = {
+      'tag' => tag,
+      'tag_parts' => tag.split('.'),
+      'hostname' => @hostname,
+      'record' => record
+    }
+
+    placeholders = @placeholder_expander.prepare_placeholders(placeholder_values)
 
     splunk_object = Hash[
         "time" => time.to_i,
-        "source" => if @source.nil? then tag.to_s else @placeholder_expander.expand(@source) end,
-        "sourcetype" => @placeholder_expander.expand(@sourcetype.to_s),
+        "source" => if @source.nil? then tag.to_s else @placeholder_expander.expand(@source, placeholders) end,
+        "sourcetype" => @placeholder_expander.expand(@sourcetype.to_s, placeholders),
         "host" => @host.to_s,
-        "index" =>  @placeholder_expander.expand(@index)
+        "index" =>  @placeholder_expander.expand(@index, placeholders)
       ]
     # TODO: parse different source types as expected: KVP, JSON, TEXT
     if @all_items
@@ -127,7 +165,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     #log.debug "format: returning: #{[tag, record].to_json.to_s}"
     json_event
   end
-  
+
   # By this point, fluentd has decided its buffer is full and it's time to flush
   # it. chunk.read is a concatenated string of JSON.to_s objects. Simply POST
   # them to Splunk and go about our life.
@@ -140,7 +178,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   ## NOTE! This method is called by internal thread, not Fluentd's main thread. So IO wait doesn't affect other plugins.
   def write(chunk)
     log.trace "splunk-http-eventcollector(write) called"
-    
+
     # Break the concatenated string of JSON-formatted events into an Array
     split_chunk = chunk.read.split("}{").each do |x|
       # Reconstruct the opening{/closing} that #split() strips off.
@@ -153,12 +191,12 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     # Don't care about the number of events so much as the POST size (bytes)
     #if split_chunk.size > @batch_event_limit
     #  log.warn "Fluentd is attempting to push #{numfmt(split_chunk.size)} " +
-    #      "events in a single push to Splunk. The configured limit is " + 
+    #      "events in a single push to Splunk. The configured limit is " +
     #      "#{numfmt(@batch_event_limit)}."
     #end
     if chunk.read.bytesize > @batch_size_limit
       log.warn "Fluentd is attempting to push #{numfmt(chunk.read.bytesize)} " +
-          "bytes in a single push to Splunk. The configured limit is " + 
+          "bytes in a single push to Splunk. The configured limit is " +
           "#{numfmt(@batch_size_limit)} bytes."
       newbuffer = Array.new
       split_chunk_counter = 0
@@ -188,7 +226,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       return push_buffer chunk.read
     end # if chunk.read.bytesize > @batch_size_limit
   end # write
-  
+
   def push_buffer(body)
     post = Net::HTTP::Post.new @splunk_uri.request_uri
     post.body = body
@@ -226,11 +264,11 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       else
         # other errors. fluentd will retry processing on exception
         # FIXME: this may duplicate logs when using multiple buffers
-        raise "#{@splunk_uri}: #{response.message}"
+        raise "#{@splunk_uri}: #{response.message}\n#{response.body}"
       end # If response.code
     end # 1.upto(@post_retry_max)
   end # push_buffer
-  
+
   def numfmt(input)
     input.to_s.reverse.gsub(/(\d{3})(?=\d)/, '\1,').reverse
   end # numfmt
