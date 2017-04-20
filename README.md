@@ -5,6 +5,8 @@ Splunk output plugin for Fluent event collector.
 This plugin interfaces with the Splunk HTTP Event Collector:
   http://dev.splunk.com/view/event-collector/SP-CAAAE6M
 
+[![Build Status](https://travis-ci.org/brycied00d/fluent-plugin-splunk-http-eventcollector.svg?branch=master)](https://travis-ci.org/brycied00d/fluent-plugin-splunk-http-eventcollector)
+
 ## Basic Example
 
     <match **>
