@@ -161,7 +161,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
         "time" => time.to_i,
         "source" => if @source.nil? then tag.to_s else @placeholder_expander.expand(@source, placeholders) end,
         "sourcetype" => @placeholder_expander.expand(@sourcetype.to_s, placeholders),
-        "host" => @host.to_s,
+        "host" => @placeholder_expander.expand(@host.to_s, placeholders),
         "index" =>  @placeholder_expander.expand(@index, placeholders)
       ]
     # TODO: parse different source types as expected: KVP, JSON, TEXT
