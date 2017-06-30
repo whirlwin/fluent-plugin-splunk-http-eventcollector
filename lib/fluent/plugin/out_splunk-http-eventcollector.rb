@@ -51,6 +51,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   config_param :source, :string, :default => nil
   config_param :post_retry_max, :integer, :default => 5
   config_param :post_retry_interval, :integer, :default => 5
+  config_param :nested_json, :bool, :default => false
 
   # TODO Find better upper limits
   config_param :batch_size_limit, :integer, :default => 262144 # 65535
@@ -174,7 +175,11 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     json_event = splunk_object.to_json
     #log.debug "Generated JSON(#{json_event.class.to_s}): #{json_event.to_s}"
     #log.debug "format: returning: #{[tag, record].to_json.to_s}"
-    json_event
+    if @nested_json
+      json_event + "\n"
+    else
+      json_event
+    end
   end
 
   # By this point, fluentd has decided its buffer is full and it's time to flush
@@ -190,11 +195,15 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   def write(chunk)
     log.trace "splunk-http-eventcollector(write) called"
 
-    # Break the concatenated string of JSON-formatted events into an Array
-    split_chunk = chunk.read.split("}{").each do |x|
-      # Reconstruct the opening{/closing} that #split() strips off.
-      x.prepend("{") unless x.start_with?("{")
-      x << "}" unless x.end_with?("}")
+    if @nested_json
+      split_chunk = chunk.read.split("\n")
+    else
+      # Break the concatenated string of JSON-formatted events into an Array
+      split_chunk = chunk.read.split("}{").each do |x|
+        # Reconstruct the opening{/closing} that #split() strips off.
+        x.prepend("{") unless x.start_with?("{")
+        x << "}" unless x.end_with?("}")
+      end
     end
     log.debug "Pushing #{numfmt(split_chunk.size)} events (" +
         "#{numfmt(chunk.read.bytesize)} bytes) to Splunk."
