@@ -176,4 +176,24 @@ class SplunkHTTPEventcollectorOutputTest < Test::Unit::TestCase
       body: { time: time, source: "test", sourcetype: "fluentd", host: "", index: "main", event: { some: { nested: "     f-8", with: ["  ","   ","f-8"]}}},
       times: 1
   end
+
+  def test_write_fields
+    stub_request(:post, "https://localhost:8089/services/collector").
+        with(headers: {"Authorization" => "Splunk changeme"}).
+        to_return(body: '{"text":"Success","code":0}')
+
+    d = create_driver(CONFIG + %[
+      fields { "cluster": "aws" }
+      source ${record["source"]}
+    ])
+
+    time = Time.parse("2010-01-02 13:14:15 UTC").to_i
+    d.emit({ "message" => "a message", "source" => "source-from-record"}, time)
+    d.run
+
+    assert_requested :post, "https://localhost:8089/services/collector",
+      headers: {"Authorization" => "Splunk changeme"},
+      body: { time: time, source: "source-from-record", sourcetype: "fluentd", host: "", index: "main", event: "a message", fields: { cluster: "aws" } },
+      times: 1
+  end
 end

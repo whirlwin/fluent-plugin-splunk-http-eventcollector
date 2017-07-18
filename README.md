@@ -204,6 +204,13 @@ Put the following lines to your fluent.conf:
       all_items true
       nested_json true
     </match>
+    
+    # log metadata in addition to the event
+    <match **>
+      type splunk-http-eventcollector
+      server splunk.example.com:8089
+      fields { "is_test_log": true }
+    </match>
 
 ## Contributing
 

@@ -52,6 +52,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   config_param :post_retry_max, :integer, :default => 5
   config_param :post_retry_interval, :integer, :default => 5
   config_param :nested_json, :bool, :default => false
+  config_param :fields, :hash, :default => {}
 
   # TODO Find better upper limits
   config_param :batch_size_limit, :integer, :default => 262144 # 65535
@@ -116,6 +117,11 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
 
     @placeholder_expander = Fluent::SplunkHTTPEventcollectorOutput.placeholder_expander(log)
     @hostname = Socket.gethostname
+
+    unless @fields.empty?
+      @fields = inject_env_vars_into_fields
+    end
+
     # TODO Add other robust input/syntax checks.
   end  # configure
 
@@ -170,6 +176,10 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       splunk_object["event"] = convert_to_utf8(record)
     else
       splunk_object["event"] = convert_to_utf8(record["message"])
+    end
+
+    unless @fields.empty?
+      splunk_object["fields"] = @fields
     end
 
     json_event = splunk_object.to_json
@@ -329,5 +339,17 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       end
     end
   end
+
+  # Environment variables are passed in with the following format:
+  # @{ENV['NAME_OF_ENV_VAR']}
+  def inject_env_vars_into_fields
+    @fields.each { | _, field_value|
+      match_data = field_value.to_s.match(/^@\{ENV\['(?<env_name>.+)'\]\}$/)
+      if match_data && match_data["env_name"]
+        field_value.replace(ENV[match_data["env_name"]])
+      end
+    }
+  end
+
 end  # class SplunkHTTPEventcollectorOutput
 end  # module Fluent
