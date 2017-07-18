@@ -120,6 +120,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
 
     unless @fields.empty?
       @fields = inject_env_vars_into_fields
+      @fields = inject_files_into_fields
     end
 
     # TODO Add other robust input/syntax checks.
@@ -347,6 +348,15 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
       match_data = field_value.to_s.match(/^@\{ENV\['(?<env_name>.+)'\]\}$/)
       if match_data && match_data["env_name"]
         field_value.replace(ENV[match_data["env_name"]])
+      end
+    }
+  end
+
+  def inject_files_into_fields
+    @fields.each { | _, field_value |
+      match_data = field_value.to_s.match(/^@\{FILE\['(?<file_path>.+)'\]\}$/)
+      if match_data && match_data["file_path"]
+        field_value.replace(IO.read(match_data["file_path"]))
       end
     }
   end
