@@ -30,6 +30,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # http://dev.splunk.com/view/event-collector/SP-CAAAE6M
 # http://docs.splunk.com/Documentation/Splunk/latest/RESTREF/RESTinput#services.2Fcollector
 
+require 'date'
+
 module Fluent
 class SplunkHTTPEventcollectorOutput < BufferedOutput
 
@@ -47,6 +49,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   config_param :index, :string, :default => 'main'
   config_param :all_items, :bool, :default => false
 
+  config_param :iso8601_time, :string, :default => nil
   config_param :sourcetype, :string, :default => 'fluentd'
   config_param :source, :string, :default => nil
   config_param :post_retry_max, :integer, :default => 5
@@ -166,7 +169,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
     placeholders = @placeholder_expander.prepare_placeholders(placeholder_values)
 
     splunk_object = Hash[
-        "time" => time.to_i,
+        "time" => handle_get_time(time, placeholders),
         "source" => if @source.nil? then tag.to_s else @placeholder_expander.expand(@source, placeholders) end,
         "sourcetype" => @placeholder_expander.expand(@sourcetype.to_s, placeholders),
         "host" => @placeholder_expander.expand(@host.to_s, placeholders),
@@ -359,6 +362,15 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
         field_value.replace(IO.read(match_data["file_path"]))
       end
     }
+  end
+
+  def handle_get_time(emitted_at_timestamp, placeholders)
+    if @iso8601_time.nil?
+      emitted_at_timestamp.to_i
+    else
+      time = @placeholder_expander.expand(@iso8601_time, placeholders)
+      DateTime.iso8601(time).to_time.to_i
+    end
   end
 
 end  # class SplunkHTTPEventcollectorOutput
