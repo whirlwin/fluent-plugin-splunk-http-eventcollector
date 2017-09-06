@@ -366,10 +366,10 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
 
   def handle_get_time(emitted_at_timestamp, placeholders)
     if @iso8601_time.nil?
-      emitted_at_timestamp.to_i
+      emitted_at_timestamp.to_f
     else
       time = @placeholder_expander.expand(@iso8601_time, placeholders)
-      DateTime.iso8601(time).to_time.to_i
+      DateTime.iso8601(time).to_time.to_f
     end
   end
 
