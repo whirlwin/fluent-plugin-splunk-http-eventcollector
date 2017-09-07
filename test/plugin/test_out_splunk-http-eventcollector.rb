@@ -120,7 +120,7 @@ class SplunkHTTPEventcollectorOutputTest < Test::Unit::TestCase
       batch_size_limit 250
     ])
 
-    time = Time.parse("2010-01-02 13:14:15 UTC").to_i
+    time = Time.parse("2010-01-02 13:14:15 UTC").to_f
     d.emit({"message" => "a" }, time)
     d.emit({"message" => "b" }, time)
     d.emit({"message" => "c" }, time)
