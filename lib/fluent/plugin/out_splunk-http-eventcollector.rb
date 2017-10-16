@@ -288,7 +288,7 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
         next
       elsif response.code.match(/^40/)
         # user error
-        log.error "#{@splunk_uri}: #{response.code} (#{response.message})\n#{response.body}"
+        log.error "#{@splunk_uri}: #{response.code} (#{response.message})\nReq: #{body}\nRes: #{response.body}"
         break
       elsif c < @post_retry_max
         # retry
