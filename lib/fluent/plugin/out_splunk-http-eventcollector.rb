@@ -57,9 +57,8 @@ class SplunkHTTPEventcollectorOutput < BufferedOutput
   config_param :nested_json, :bool, :default => false
   config_param :fields, :hash, :default => {}
 
-  # TODO Find better upper limits
-  config_param :batch_size_limit, :integer, :default => 262144 # 65535
-  #config_param :batch_event_limit, :integer, :default => 100
+  # Same as max_content_length in Splunk HEC
+  config_param :batch_size_limit, :integer, :default => 838860800
 
   # Whether to allow non-UTF-8 characters in user logs. If set to true, any
   # non-UTF-8 character would be replaced by the string specified by
